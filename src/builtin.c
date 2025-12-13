@@ -1,8 +1,21 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 #include "shell.h"
 
-builtin_cmd commands[CMD_COUNT];
+typedef int (*cmd_fn)(int argc, char** argv);
 
-int cd(int argc, char* argv[]) {
+typedef struct {
+    const char* name;
+    cmd_fn fptr;
+} builtin_cmd;
+
+static builtin_cmd commands[] = {
+    {"cd", builtin_cd}, {"exit", builtin_exit}, {NULL, NULL}};
+
+int builtin_cd(int argc, char* argv[]) {
     if (argc < 2) {
         fprintf(stderr, "usage: cd <DIR>\n");
         return 1;
@@ -16,15 +29,23 @@ int cd(int argc, char* argv[]) {
     return 0;
 }
 
-void init_builtin(void) {
-    builtin_cmd builtin_cd = {.name = "cd", .fptr = cd};
-    commands[0] = builtin_cd;
+int builtin_exit(int argc, char* argv[]) {
+    if (argc <= 1) exit(0);
+
+    char* end;
+    long code = strtol(argv[1], &end, 10);
+
+    if (*end != 0x00) {
+        fprintf(stderr, "exit: numeric argument required\n");
+        exit(2);
+    }
+    exit(code & 0xFF);
 }
 
-int call_builtin(int argc, char* argv[]) {
-    for (int i = 0; i < CMD_COUNT; ++i) {
-        if (strcmp(commands[i].name, argv[0]) != 0) continue;
-        return (*commands[i].fptr)(argc, argv);
+int builtin_call(int argc, char* argv[]) {
+    for (builtin_cmd* cmdptr = commands; cmdptr->name != NULL; ++cmdptr) {
+        if (strcmp(cmdptr->name, argv[0]) == 0)
+            return (cmdptr->fptr)(argc, argv);
     }
     return -1;
 }

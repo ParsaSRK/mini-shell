@@ -1,4 +1,5 @@
 CC := gcc
+TARGET := $(BUILDDIR)/mini-shell
 
 CFLAGS := -std=c11 -Wall -Wextra -Wpedantic \
 		  -D_POSIX_C_SOURCE=200809L \
@@ -27,13 +28,13 @@ $(BUILDDIR):
 $(BUILDDIR)/%.o: src/%.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-mini-shell: $(OBJ)
-	$(CC) $(OBJ) -o $(BUILDDIR)/$@ $(LDFLAGS)
+$(TARGET): $(OBJ)
+	$(CC) $(OBJ) -o $@ $(LDFLAGS)
 
 .PHONY: all clean
 
-all: mini-shell
+all: $(TARGET)
 
 clean:
-	rm -rf $(BUILDDIR) mini-shell
+	rm -rf $(BUILDDIR)
 
