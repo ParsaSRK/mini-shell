@@ -8,7 +8,7 @@
 
 #include "shell.h"
 
-int execute(char** argv) {
+static int execute(char** argv) {
     pid_t pid = fork();
     if (pid < 0) {
         perror("fork");
@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Print prompt
-        printf("%s > ", cwd);
+        printf("%s> ", cwd);
         fflush(stdout);
         free(cwd);
 
