@@ -42,10 +42,10 @@ int builtin_exit(int argc, char* argv[]) {
     exit(code & 0xFF);
 }
 
-int builtin_call(int argc, char* argv[]) {
+int builtin_call(command* cmd) {
     for (builtin_cmd* cmdptr = commands; cmdptr->name != NULL; ++cmdptr) {
-        if (strcmp(cmdptr->name, argv[0]) == 0)
-            return (cmdptr->fptr)(argc, argv);
+        if (strcmp(cmdptr->name, cmd->argv[0]) == 0)
+            return (cmdptr->fptr)(cmd->argc, cmd->argv);
     }
     return -1;
 }
