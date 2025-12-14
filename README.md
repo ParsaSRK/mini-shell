@@ -44,7 +44,6 @@ build/mini-shell
 
 ## Limitations
 
-* No I/O redirection
 * No pipes
 * No job control
 * No quoting or escaping in input parsing
