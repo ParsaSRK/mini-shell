@@ -50,7 +50,7 @@ error:
     if (fdout != -1) close(fdout);
     if (fdin != -1) close(fdin);
     if (fderr != -1) close(fderr);
-    return 1;
+    return -1;
 }
 
 static void command_free(command* cmd) {
