@@ -2,7 +2,7 @@ CC := gcc
 
 CFLAGS := -std=c11 -Wall -Wextra -Wpedantic \
 		  -D_POSIX_C_SOURCE=200809L \
-		  -Iinclude
+		  -I./include
 DEBUG_FLAGS := -g -O0 -fsanitize=address -fno-omit-frame-pointer
 RELEASE_FLAGS := -O2 -DNDEBUG
 LDFLAGS :=
