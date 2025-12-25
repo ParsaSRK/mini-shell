@@ -1,5 +1,6 @@
 #include "parse.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -40,7 +41,7 @@ typedef struct lex_token {
  * @brief Token buffer used while building the current word token.
  */
 typedef struct lex_token_buf {
-    char *buf; ///< Heap-allocated character buffer.
+    char *data; ///< Heap-allocated, NUL-terminated character buffer.
     size_t len; ///< Current length in use (excluding NUL).
     size_t cap; ///< Allocated capacity of buf.
 } lex_token_buf;
@@ -50,7 +51,7 @@ typedef struct lex_token_buf {
  * NULL-terminated when tokenization completes.
  */
 typedef struct lex_token_list {
-    lex_token **tokens; ///< Heap-allocated tokens list.
+    lex_token **data; ///< Heap-allocated, NULL-terminated tokens list.
     size_t len; ///< Number of tokens stored (excluding the NULL terminator).
     size_t cap; ///< Allocated capacity of tokens.
 } lex_token_list;
@@ -72,7 +73,7 @@ static void free_ptrv(void **arr, void (*destroy)(void *)) {
 }
 
 /**
- * Free a Lex Token.
+ * @brief Free a Lex Token.
  *
  * @param token Heap-allocated token.
  */
@@ -82,7 +83,7 @@ static void free_lex_token(lex_token *token) {
 }
 
 /**
- * Adapter for free_lex_token to match void* destructor callbacks.
+ * @brief Adapter for free_lex_token to match void* destructor callbacks.
  *
  * Used when freeing generic pointer vectors.
  *
@@ -93,7 +94,7 @@ static void free_lex_token_adapter(void *p) {
 }
 
 /**
- * Adapter for free_ast_node to match void* destructor callbacks.
+ * @brief Adapter for free_ast_node to match void* destructor callbacks.
  *
  * Used when freeing generic pointer vectors.
  *
@@ -131,14 +132,82 @@ void free_ast_node(ast_node *node) {
 /**
  * @brief Appends a single lex_token to the lex_token_list
  *
- * @param tokens token list being built.
+ * @param list token list being built.
  * @param token token being pushed.
  * @return non-zero if failed.
  */
-static int push_token(lex_token_list *tokens, lex_token *token) {
-    if (!tokens || !token) return -1;
-
+static int token_push(lex_token_list *list, lex_token *token) {
+    if (!list) return -1;
+    if (list->cap == 0) {
+        lex_token **temp = realloc(list->data, 4 * sizeof(lex_token *));
+        if (!temp) {
+            perror("realloc");
+            return -1;
+        }
+        list->data = temp;
+        list->cap = 4;
+    } else if (list->len + 2 > list->cap) {
+        lex_token **temp = realloc(list->data, 2 * list->cap * sizeof(lex_token *));
+        if (!temp) {
+            perror("realloc");
+            return -1;
+        }
+        list->data = temp;
+        list->cap <<= 1;
+    }
+    list->data[list->len] = token;
+    list->data[list->len + 1] = NULL;
+    ++list->len;
     return 0;
+}
+
+/**
+ * appends a single character to token buffer
+ *
+ * @param buf token buffer being built
+ * @param c character being pushed
+ * @return non-zero if failed.
+ */
+static int buf_push(lex_token_buf *buf, char c) {
+    if (!buf) return -1;
+    if (buf->cap == 0) {
+        char *temp = realloc(buf->data, 4 * sizeof(char));
+        if (!temp) {
+            perror("realloc");
+            return -1;
+        }
+        buf->data = temp;
+        buf->cap = 4;
+    } else if (buf->len + 2 > buf->cap) {
+        char *temp = realloc(buf->data, 2 * buf->cap * sizeof(char));
+        if (!temp) {
+            perror("realloc");
+            return -1;
+        }
+        buf->data = temp;
+        buf->cap <<= 1;
+    }
+    buf->data[buf->len] = c;
+    buf->data[buf->len + 1] = 0x00;
+    ++buf->len;
+    return 0;
+}
+
+static int is_special(char c) {
+    switch (c) {
+        case '\0':
+        case ' ':
+        case '\t':
+        case '\n':
+        case ';':
+        case '|':
+        case '&':
+        case '<':
+        case '>':
+            return 1;
+        default:
+            return 0;
+    }
 }
 
 // Lexer
@@ -149,9 +218,47 @@ static int push_token(lex_token_list *tokens, lex_token *token) {
  * @return Heap-allocated, NULL-terminated lex_token list (or NULL on error)
  */
 static lex_token **lex_line(const char *str) {
-    // TODO
+    lex_token_list list = {
+        .data = NULL,
+        .cap = 0,
+        .len = 0
+    };
 
-    return NULL; // temporary
+    lex_state state = LEX_DEFAULT;
+    lex_token_buf buf = {
+        .data = NULL,
+        .cap = 0,
+        .len = 0
+    };
+
+    for (const char *cur = str; 1; ++cur) {
+        switch (state) {
+            case LEX_DEFAULT:
+                if (!is_special(*cur)) {
+                    // if (buf_push(&buf, *cur)) {
+                    //     free(buf.data);
+                    //     free_ptrv((void**)list.data, free_lex_token_adapter);
+                    //     return NULL;
+                    // }
+                } else {
+                    // TODO: emit token & if operator -> emit operator token
+                }
+                break;
+            case LEX_SINGLE_QUOTE:
+                // TODO: read until single quote
+                break;
+            case LEX_DOUBLE_QUOTE:
+                // TODO: read until double quote
+                break;
+            case LEX_ESC:
+                // TODO: escape next character
+                break;
+        }
+
+        if (*cur == 0x00) break;
+    }
+
+    return list.data;
 }
 
 // Parsers
