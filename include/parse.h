@@ -6,10 +6,10 @@
  * @brief Node types for AST.
  */
 typedef enum node_type {
-    NODE_SEQ, // Sequence of commands, separated by ';'
-    NODE_BG, // Background, terminated by '&'
-    NODE_PIPE, // Pipe, separated by '|'
-    NODE_CMD, // Command (leaves of the tree)
+    NODE_SEQ, ///< Sequence of commands, separated by ';'
+    NODE_BG, ///< Background, terminated by '&'
+    NODE_PIPE, ///< Pipe, separated by '|'
+    NODE_CMD, ///< Command (leaves of the tree)
 } node_type;
 
 // declaration for recursive structure
@@ -18,51 +18,39 @@ typedef struct ast_node ast_node;
 /**
  * @brief Used for NODE_PIPE and NODE_SEQ as
  * both have the same structure.
- *
- * @field children  Heap-allocated children node list
  */
 typedef struct list_node {
-    ast_node **children;
+    ast_node **children;    ///< Heap-allocated children node list
 } list_node;
 
 /**
  * @brief Used for NODE_BG
- *
- * @field child pointer to Heap-allocated child node
  */
 typedef struct bg_node {
-    ast_node *child;
+    ast_node *child; ///< pointer to Heap-allocated child node
 } bg_node;
 
 /**
  * @brief used for NODE_CMD
- *
- * @field argv Heap-allocated, NULL-terminated argument list.
- * @field in Heap-allocated, stdin file name (or NULL to inherit).
- * @field out Heap-allocated, stdout file name (or NULL to inherit).
- * @field err Heap-allocated, stderr file name (or NULL to inherit).
  */
 typedef struct cmd_node {
-    char **argv;
-    char *in;
-    char *out;
-    char *err;
+    char **argv; ///< Heap-allocated, NULL-terminated argument list.
+    char *in;   ///< Heap-allocated, stdin file name (or NULL to inherit).
+    char *out;  ///< Heap-allocated, stdout file name (or NULL to inherit).
+    char *err;  ///< Heap-allocated, stderr file name (or NULL to inherit).
 } cmd_node;
 
 /**
  * @brief Abstract Syntax Tree Node.
- *
- * @field type Node type
- * @field as An abstraction to node information based on type
  */
 typedef struct ast_node {
-    node_type type;
+    node_type type; ///< Node type
 
     union {
         list_node list;
         bg_node bg;
         cmd_node cmd;
-    } as;
+    } as; ///< An abstraction to node information based on type
 } ast_node;
 
 

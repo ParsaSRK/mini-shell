@@ -9,63 +9,50 @@
  * @brief Lexing FSM used by the lexer.
  */
 typedef enum lex_state {
-    LEX_DEFAULT, // normal state
-    LEX_DOUBLE_QUOTE, // inside "
-    LEX_SINGLE_QUOTE, // inside '
-    LEX_ESC, // escape character '\'
+    LEX_DEFAULT, ///< normal state
+    LEX_DOUBLE_QUOTE, ///< inside double quotation "
+    LEX_SINGLE_QUOTE, ///< inside single quotation '
+    LEX_ESC, ///< escape character '\'
 } lex_state;
-
-// Token Structures
 
 /**
  * @brief Token type produced by the lexer
  */
 typedef enum lex_token_type {
-    TK_DEFAULT, // word/argument
-    TK_PIPE, // |
-    TK_REDIR_OUT, // >
-    TK_REDIR_IN, // <
-    TK_BG, // &
+    TK_DEFAULT, ///< regular word token
+    TK_PIPE, ///< pipe token '|'
+    TK_REDIR_OUT, ///< out redirection token '>'
+    TK_REDIR_IN, ///< in redirection token '<'
+    TK_BG, ///< background token '&'
 } lex_token_type;
 
 /**
  * @brief Lexer token holding type and text.
  *
- * @field type      Token classification
- * @field data      Heap-allocated token text (or NULL for operators).
- * @field next_adj  Nonzero when adjacent to the next token (no whitespace).
  */
 typedef struct lex_token {
-    lex_token_type type;
-    char *data;
-    int next_adj;
+    lex_token_type type; ///< Token classification
+    char *data; ///< Heap-allocated token text (or NULL for operators).
+    int next_adj; ///< Nonzero when adjacent to the next token (no whitespace).
 } lex_token;
 
 /**
  * @brief Token buffer used while building the current word token.
- *
- * @field buf Heap-allocated character buffer.
- * @field len Current length in use (excluding NUL).
- * @field cap Allocated capacity of buf.
  */
 typedef struct lex_token_buf {
-    char *buf;
-    size_t len;
-    size_t cap;
+    char *buf; ///< Heap-allocated character buffer.
+    size_t len; ///< Current length in use (excluding NUL).
+    size_t cap; ///< Allocated capacity of buf.
 } lex_token_buf;
 
 /**
  * @brief Dynamic list of lex_token pointers.
  * NULL-terminated when tokenization completes.
- *
- * @field tokens Heap-allocated tokens list.
- * @field len Number of tokens stored (excluding the NULL terminator).
- * @field cap Allocated capacity of tokens.
  */
 typedef struct lex_token_list {
-    lex_token **tokens;
-    size_t len;
-    size_t cap;
+    lex_token **tokens; ///< Heap-allocated tokens list.
+    size_t len; ///< Number of tokens stored (excluding the NULL terminator).
+    size_t cap; ///< Allocated capacity of tokens.
 } lex_token_list;
 
 // Memory Management Functions
@@ -139,8 +126,28 @@ void free_ast_node(ast_node *node) {
     free(node);
 }
 
+// Lexer helper functions
+
+/**
+ * @brief Appends a single lex_token to the lex_token_list
+ *
+ * @param tokens token list being built.
+ * @param token token being pushed.
+ * @return non-zero if failed.
+ */
+static int push_token(lex_token_list *tokens, lex_token *token) {
+    if (!tokens || !token) return -1;
+
+    return 0;
+}
 
 // Lexer
+/**
+ * @brief Tokenizes the string to be parsed.
+ *
+ * @param str the string being tokenized
+ * @return Heap-allocated, NULL-terminated lex_token list (or NULL on error)
+ */
 static lex_token **lex_line(const char *str) {
     // TODO
 
