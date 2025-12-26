@@ -12,15 +12,14 @@ typedef enum node_type {
     NODE_CMD, ///< Command (leaves of the tree)
 } node_type;
 
-// declaration for recursive structure
-typedef struct ast_node ast_node;
+typedef struct ast_node ast_node; // declaration for recursive structure
 
 /**
  * @brief Used for NODE_PIPE and NODE_SEQ as
  * both have the same structure.
  */
 typedef struct list_node {
-    ast_node **children;    ///< Heap-allocated children node list
+    ast_node **children; ///< Heap-allocated children node list
 } list_node;
 
 /**
@@ -35,9 +34,9 @@ typedef struct bg_node {
  */
 typedef struct cmd_node {
     char **argv; ///< Heap-allocated, NULL-terminated argument list.
-    char *in;   ///< Heap-allocated, stdin file name (or NULL to inherit).
-    char *out;  ///< Heap-allocated, stdout file name (or NULL to inherit).
-    char *err;  ///< Heap-allocated, stderr file name (or NULL to inherit).
+    char *in; ///< Heap-allocated, stdin file name (or NULL to inherit).
+    char *out; ///< Heap-allocated, stdout file name (or NULL to inherit).
+    char *err; ///< Heap-allocated, stderr file name (or NULL to inherit).
 } cmd_node;
 
 /**
@@ -54,14 +53,21 @@ typedef struct ast_node {
 } ast_node;
 
 
-// API
-
 /**
- * Free an AST Node.
+ * @brief Free an AST Node.
  *
  * @param node Pointer to an ast_node.
  */
 void free_ast_node(ast_node *node);
+
+/**
+ * @brief Adapter for free_ast_node to match void* destructor callbacks.
+ *
+ * Used when freeing generic pointer vectors.
+ *
+ * @param p Pointer to an ast_node.
+ */
+void free_ast_node_adapter(void *p);
 
 /**
  * @brief Parses a line of input to an AST
