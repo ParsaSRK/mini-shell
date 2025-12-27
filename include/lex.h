@@ -23,6 +23,9 @@ typedef enum lex_token_type {
     TK_BG, ///< background token '&'
     TK_REDIR_IN, ///< in redirection token '<'
     TK_REDIR_OUT, ///< out redirection token '>'
+    TK_REDIR_APPEND, ///< append redirection token '>>'
+    TK_AND, ///< and token '&&'
+    TK_OR, ///< or token '||'
 } lex_token_type;
 
 /**

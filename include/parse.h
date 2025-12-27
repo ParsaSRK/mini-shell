@@ -10,9 +10,20 @@ typedef enum node_type {
     NODE_BG, ///< Background, terminated by '&'
     NODE_PIPE, ///< Pipe, separated by '|'
     NODE_CMD, ///< Command (leaves of the tree)
+    NODE_AND, ///< AND operator, separated by '&&'
+    NODE_OR, ///< OR operator, separated by '||'
 } node_type;
 
 typedef struct ast_node ast_node; // declaration for recursive structure
+
+/**
+ * @brief used for NODE_AND, and NODE_OR
+ * as both have the same structure
+ */
+typedef struct binary_node {
+    ast_node *left; ///< left part
+    ast_node *right; ///< right part
+} binary_node;
 
 /**
  * @brief Used for NODE_PIPE and NODE_SEQ as
@@ -37,6 +48,7 @@ typedef struct cmd_node {
     char *in; ///< Heap-allocated, stdin file name (or NULL to inherit).
     char *out; ///< Heap-allocated, stdout file name (or NULL to inherit).
     char *err; ///< Heap-allocated, stderr file name (or NULL to inherit).
+    int is_append; ///< whether output should be appended or overwritten.
 } cmd_node;
 
 /**
@@ -46,6 +58,7 @@ typedef struct ast_node {
     node_type type; ///< Node type
 
     union {
+        binary_node binary;
         list_node list;
         bg_node bg;
         cmd_node cmd;

@@ -7,18 +7,18 @@
 
 // Lexer Structures
 
-const char lex_whitespaces[] = " \n\t";
-const char lex_operators[] = ";|&<>";
+static const char lex_whitespaces[] = " \n\t";
+static const char lex_operators[] = ";|&<>";
 
 // Memory Management Functions
 
-void free_lex_token(lex_token *token){
+void free_lex_token(lex_token *token) {
     if (!token) return;
     free(token->data);
     free(token);
 }
 
-void free_lex_token_adapter(void *p){
+void free_lex_token_adapter(void *p) {
     free_lex_token((lex_token *) p);
 }
 
@@ -115,20 +115,57 @@ static int is_operator(char c) {
 }
 
 /**
- * @brief Converts operator character to lex_token_type
+ * @brief Greedily expands operator pointed at *c, returns corresponding heap allocated token.
+ * moves the passed pointer till the end of pointer.
  *
- * @param c operator character
- * @return corresponding lex_token_type
+ * @param c string pointer address
+ * @return Heap allocated corresponding token, NULL when error or operator not found.
  */
-static lex_token_type op_type(char c) {
-    switch (c) {
-        case ';': return TK_SEMICOLON;
-        case '|': return TK_PIPE;
-        case '&': return TK_BG;
-        case '<': return TK_REDIR_IN;
-        case '>': return TK_REDIR_OUT;
-        default: return TK_DEFAULT;
+static lex_token *get_token(const char **c) {
+    // Allocate operator token
+    lex_token *tok = malloc(sizeof(lex_token));
+    if (!tok) goto cleanup;
+
+    // Emit operator token
+    tok->data = NULL;
+    switch (**c) {
+        case ';':
+            tok->type = TK_SEMICOLON;
+            break;
+        case '|':
+            tok->type = TK_PIPE;
+            if (*(*c + 1) == '|') {
+                tok->type = TK_OR;
+                ++(*c);
+            }
+            break;
+        case '&':
+            tok->type = TK_BG;
+            if (*(*c + 1) == '&') {
+                tok->type = TK_AND;
+                ++(*c);
+            }
+            break;
+        case '<':
+            tok->type = TK_REDIR_IN;
+            break;
+        case '>':
+            tok->type = TK_REDIR_OUT;
+            if (*(*c + 1) == '>') {
+                tok->type = TK_REDIR_APPEND;
+                ++(*c);
+            }
+            break;
+        default: goto cleanup;
     }
+
+    tok->next_adj = !is_whitespace(*(*c + 1)) && *(*c + 1) != 0x00;
+
+    return tok;
+
+cleanup:
+    free(tok);
+    return NULL;
 }
 
 lex_token **lex_line(const char *str) {
@@ -181,7 +218,7 @@ lex_token **lex_line(const char *str) {
 
                     // Emit token
                     tok->data = buf.data;
-                    tok->next_adj = is_operator(*c);
+                    tok->next_adj = !is_whitespace(*c) && *c != 0x00;
                     tok->type = TK_DEFAULT;
 
                     // Reset buffer (before token_push) to avoid double free on error.
@@ -197,16 +234,8 @@ lex_token **lex_line(const char *str) {
 
                 // Emit operator token
                 if (is_operator(*c)) {
-
-                    // Allocate operator token
-                    tok = malloc(sizeof(lex_token));
-                    if (!tok) goto cleanup;
-
-                    // Emit operator token
-                    tok->data = NULL;
-                    tok->type = op_type(*c);
-                    tok->next_adj = !is_whitespace(*(c + 1));
-                    if (token_push(&list, tok)) goto cleanup;
+                    tok = get_token(&c);
+                    if (!tok || token_push(&list, tok)) goto cleanup;
 
                     // Reset token and avoid double free
                     tok = NULL;
@@ -297,6 +326,15 @@ void print_token(lex_token *tok) {
             break;
         case TK_REDIR_OUT:
             printf("OUT(adj=%d)", tok->next_adj);
+            break;
+        case TK_REDIR_APPEND:
+            printf("APPEND(adj=%d)", tok->next_adj);
+            break;
+        case TK_AND:
+            printf("AND(adj=%d)", tok->next_adj);
+            break;
+        case TK_OR:
+            printf("OR(adj=%d)", tok->next_adj);
             break;
         default:
             fprintf(stderr, "INVALID_TOKEN_TYPE");

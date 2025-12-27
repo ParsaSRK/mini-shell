@@ -29,7 +29,10 @@ void free_ast_node(ast_node *node) {
             free(node->as.cmd.out);
             free(node->as.cmd.err);
             break;
-        default:
+        case NODE_AND:
+        case NODE_OR:
+            free_ast_node(node->as.binary.left);
+            free_ast_node(node->as.binary.right);
             break;
     }
     free(node);
