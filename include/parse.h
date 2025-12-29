@@ -40,16 +40,22 @@ typedef struct bg_node {
     ast_node *child; ///< pointer to Heap-allocated child node
 } bg_node;
 
+/**
+ * @brief Redirection type for commands
+ */
 typedef enum redir_type {
-    REDIR_IN, ///<
-    REDIR_OUT,
-    REDIR_APPEND
+    REDIR_IN, ///< '<'
+    REDIR_OUT, ///< '>'
+    REDIR_APPEND ///< '<<'
 } redir_type;
 
+/**
+ * @brief I/O redirection structure for NODE_CMD.
+ */
 typedef struct redir {
-    int fd;
-    redir_type type;
-    char *filename;
+    int fd; ///< file descriptor (0: stdin, 1: stdout, 2:stderr)
+    redir_type type; ///< redirection type
+    char *path; ///< file's path used for redirection
 } redir;
 
 /**
@@ -74,6 +80,8 @@ typedef struct ast_node {
     } as; ///< An abstraction to node information based on type
 } ast_node;
 
+
+// API Functions
 
 /**
  * @brief Free a redir struct
@@ -104,7 +112,6 @@ void free_ast_node(ast_node *node);
  * @param p Pointer to an ast_node.
  */
 void free_ast_node_adapter(void *p);
-
 
 /**
  * @brief recursively prints nodes of a valid AST tree.

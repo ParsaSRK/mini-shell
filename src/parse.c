@@ -13,7 +13,7 @@
 // Memory Management Functions
 
 void free_redir(redir *io) {
-    free(io->filename);
+    free(io->path);
     free(io);
 }
 
@@ -42,6 +42,8 @@ void free_ast_node(ast_node *node) {
             free_ast_node(node->as.binary.left);
             free_ast_node(node->as.binary.right);
             break;
+        default:
+            fprintf(stderr, "Invalid node type!\n");
     }
     free(node);
 }
@@ -96,10 +98,13 @@ void print_ast(const ast_node *root, int depth) {
                 printf("%d%s%s ",
                        (*it)->fd,
                        (*it)->type == REDIR_IN ? "<" : (*it)->type == REDIR_OUT ? ">" : ">>",
-                       (*it)->filename);
+                       (*it)->path);
             }
             printf("\n");
             break;
+
+        default:
+            fprintf(stderr, "Invalid node type!\n");
     }
 }
 
@@ -122,10 +127,16 @@ static ast_node *parse_cmd(lex_token **l, lex_token **r) {
     ast_node *leaf = NULL;
     int *consumed = NULL;
 
-    if (l == r) goto cleanup;
+    if (l == r) {
+        fprintf(stderr, "Empty segment not allowed!\n");
+        goto cleanup;
+    }
 
     leaf = calloc(1, sizeof(ast_node));
-    if (!leaf) goto cleanup;
+    if (!leaf) {
+        perror("calloc");
+        goto cleanup;
+    }
     leaf->type = NODE_CMD;
 
     int iocnt = 0;
@@ -136,11 +147,17 @@ static ast_node *parse_cmd(lex_token **l, lex_token **r) {
     }
 
     leaf->as.cmd.io = calloc(iocnt + 1, sizeof(redir *));
-    if (!leaf->as.cmd.io) goto cleanup;
+    if (!leaf->as.cmd.io) {
+        perror("calloc");
+        goto cleanup;
+    }
     int i = 0;
 
     consumed = calloc(r - l, sizeof(int));
-    if (!consumed) goto cleanup;
+    if (!consumed) {
+        perror("calloc");
+        goto cleanup;
+    }
 
     for (lex_token **it = l; it != r; ++it) {
         if ((*it)->type != TK_REDIR_IN &&
@@ -150,7 +167,10 @@ static ast_node *parse_cmd(lex_token **l, lex_token **r) {
 
         // Allocate memory
         redir *io = calloc(1, sizeof(redir));
-        if (!io) goto cleanup;
+        if (!io) {
+            perror("calloc");
+            goto cleanup;
+        }
 
         leaf->as.cmd.io[i++] = io;
 
@@ -168,9 +188,15 @@ static ast_node *parse_cmd(lex_token **l, lex_token **r) {
         consumed[it - l] = 1; // mark token as consumed.
 
         // Check and set the file name
-        if (*(it + 1) == NULL || (*(it + 1))->type != TK_DEFAULT) goto cleanup;
-        io->filename = strdup((*(it + 1))->data);
-        if (!io->filename) goto cleanup;
+        if (*(it + 1) == NULL || (*(it + 1))->type != TK_DEFAULT || (*(it + 1))->data == NULL) {
+            fprintf(stderr, "Invalid filename!\n");
+            goto cleanup;
+        }
+        io->path = strdup((*(it + 1))->data);
+        if (!io->path) {
+            perror("strdup");
+            goto cleanup;
+        }
         consumed[it - l + 1] = 1; // mark filename as consumed
 
         // Check and set fd
@@ -191,18 +217,25 @@ static ast_node *parse_cmd(lex_token **l, lex_token **r) {
         argc += !consumed[it - l];
 
     leaf->as.cmd.argv = calloc(argc + 1, sizeof(char *));
-    if (!leaf->as.cmd.argv) goto cleanup;
+    if (!leaf->as.cmd.argv) {
+        perror("calloc");
+        goto cleanup;
+    }
 
     int idx = 0;
     for (lex_token **it = l; it != r; ++it) {
         if (!consumed[it - l]) {
-            if ((*it)->type != TK_DEFAULT || (*it)->data != NULL) goto cleanup;
+            if ((*it)->type != TK_DEFAULT || (*it)->data == NULL) {
+                perror("Invalid argv token\n!");
+                goto cleanup;
+            }
             leaf->as.cmd.argv[idx++] = strdup((*it)->data);
-            if (!leaf->as.cmd.argv[idx - 1]) goto cleanup;
+            if (!leaf->as.cmd.argv[idx - 1]) {
+                perror("strdup");
+                goto cleanup;
+            }
         }
     }
-
-    leaf->as.cmd.argv[argc] = NULL;
 
     free(consumed);
     return leaf;
@@ -216,7 +249,10 @@ cleanup:
 static ast_node *parse_pipe(lex_token **l, lex_token **r) {
     ast_node *root = NULL;
 
-    if (l == r) goto cleanup;
+    if (l == r) {
+        fprintf(stderr, "Empty segment not allowed!\n");
+        goto cleanup;
+    }
 
     int cnt = 0;
     for (lex_token **it = l; it != r; ++it)
@@ -227,14 +263,19 @@ static ast_node *parse_pipe(lex_token **l, lex_token **r) {
         return parse_cmd(l, r);
 
     root = malloc(sizeof(ast_node));
-    if (!root) goto cleanup;
+    if (!root) {
+        perror("malloc");
+        goto cleanup;
+    }
     root->type = NODE_PIPE;
     root->as.list.children = NULL; // safe cleanup
 
     // cnt+1 segment + 1 NULL terminator
     root->as.list.children = calloc(cnt + 2, sizeof(ast_node *));
-    if (!root->as.list.children) goto cleanup;
-
+    if (!root->as.list.children) {
+        perror("calloc");
+        goto cleanup;
+    }
 
     int i = 0;
     lex_token **ll = l;
@@ -280,7 +321,10 @@ static int parse_and_or(lex_token **l, lex_token **r, ast_node **result) {
 
         // Allocate memory
         child = malloc(sizeof(ast_node));
-        if (!child) goto cleanup;
+        if (!child) {
+            perror("malloc");
+            goto cleanup;
+        }
 
         // Set type
         if ((*rr)->type == TK_AND) child->type = NODE_AND;
@@ -305,7 +349,10 @@ static int parse_and_or(lex_token **l, lex_token **r, ast_node **result) {
         ll = rr + 1;
     }
     // only one segment ( impossible ) but just in case.
-    if (!tail) goto cleanup;
+    if (!tail) {
+        fprintf(stderr, "Internal error!\n");
+        goto cleanup;
+    }
 
     tail->as.binary.right = parse_pipe(ll, r);
     if (!tail->as.binary.right) goto cleanup;
@@ -339,11 +386,17 @@ ast_node *parse_line(const char *line) {
 
     // Allocate the root ( NODE_SEQ )
     root = malloc(sizeof(ast_node));
-    if (!root) goto cleanup;
+    if (!root) {
+        perror("malloc");
+        goto cleanup;
+    }
 
     root->type = NODE_SEQ;
     root->as.list.children = calloc(mxcnt + 1, sizeof(ast_node *));
-    if (!root->as.list.children) goto cleanup;
+    if (!root->as.list.children) {
+        perror("calloc");
+        goto cleanup;
+    }
 
     int i = 0;
     lex_token **l = tokens;
@@ -353,14 +406,17 @@ ast_node *parse_line(const char *line) {
         int res = parse_and_or(l, r, &child);
         if (res == -1) goto cleanup;
         if (res == 1) {
-            if (*r == NULL)
-                break;
+            if (*r == NULL) break;
+            fprintf(stderr, "Empty segment not allowed!\n");
             goto cleanup;
         }
 
         if (*r != NULL && (*r)->type == TK_BG) {
             ast_node *bg = malloc(sizeof(ast_node));
-            if (!bg) goto cleanup;
+            if (!bg) {
+                perror("malloc");
+                goto cleanup;
+            }
             bg->type = NODE_BG;
             bg->as.bg.child = child;
             root->as.list.children[i++] = bg;

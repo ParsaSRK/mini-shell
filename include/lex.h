@@ -55,7 +55,7 @@ typedef struct lex_token_list {
     size_t cap; ///< Allocated capacity of tokens.
 } lex_token_list;
 
-// API functions
+// API Functions
 
 /**
  * @brief Free a Lex Token.

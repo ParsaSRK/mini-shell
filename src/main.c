@@ -17,7 +17,6 @@ int main(void) {
 
         // Print prompt
         printf("%s> ", cwd);
-        fflush(stdout);
         free(cwd);
 
         // Get a line
