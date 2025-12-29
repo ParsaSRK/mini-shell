@@ -40,15 +40,24 @@ typedef struct bg_node {
     ast_node *child; ///< pointer to Heap-allocated child node
 } bg_node;
 
+typedef enum redir_type {
+    REDIR_IN, ///<
+    REDIR_OUT,
+    REDIR_APPEND
+} redir_type;
+
+typedef struct redir {
+    int fd;
+    redir_type type;
+    char *filename;
+} redir;
+
 /**
  * @brief used for NODE_CMD
  */
 typedef struct cmd_node {
     char **argv; ///< Heap-allocated, NULL-terminated argument list.
-    char *in; ///< Heap-allocated, stdin file name (or NULL to inherit).
-    char *out; ///< Heap-allocated, stdout file name (or NULL to inherit).
-    char *err; ///< Heap-allocated, stderr file name (or NULL to inherit).
-    int is_append; ///< whether output should be appended or overwritten.
+    redir **io;
 } cmd_node;
 
 /**
@@ -67,6 +76,21 @@ typedef struct ast_node {
 
 
 /**
+ * @brief Free a redir struct
+ *
+ * @param io Pointer to a redir struct
+ */
+void free_redir(redir *io);
+
+/**
+ * @brief Adapter for free_redir to match void* destructor callbacks.
+ * Used when freeing generic pointer vectors.
+ *
+ * @param p Pointer to a redir struct
+ */
+void free_redir_adapter(void *p);
+
+/**
  * @brief Free an AST Node.
  *
  * @param node Pointer to an ast_node.
@@ -75,12 +99,20 @@ void free_ast_node(ast_node *node);
 
 /**
  * @brief Adapter for free_ast_node to match void* destructor callbacks.
- *
  * Used when freeing generic pointer vectors.
  *
  * @param p Pointer to an ast_node.
  */
 void free_ast_node_adapter(void *p);
+
+
+/**
+ * @brief recursively prints nodes of a valid AST tree.
+ *
+ * @param root Root node of the AST tree
+ * @param depth current depth of the node (default = 0, used for indentation)
+ */
+void print_ast(const ast_node *root, int depth);
 
 /**
  * @brief Parses a line of input to an AST

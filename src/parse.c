@@ -1,4 +1,8 @@
 #include "parse.h"
+
+#include <errno.h>
+#include <limits.h>
+
 #include "lex.h"
 #include "utils.h"
 
@@ -8,9 +12,15 @@
 
 // Memory Management Functions
 
-void free_ast_node_adapter(void *p) {
-    free_ast_node((ast_node *) p);
+void free_redir(redir *io) {
+    free(io->filename);
+    free(io);
 }
+
+void free_redir_adapter(void *p) {
+    free_redir((redir *) p);
+}
+
 
 void free_ast_node(ast_node *node) {
     if (!node) return;
@@ -25,9 +35,7 @@ void free_ast_node(ast_node *node) {
             break;
         case NODE_CMD:
             free_ptrv((void **) node->as.cmd.argv, free);
-            free(node->as.cmd.in);
-            free(node->as.cmd.out);
-            free(node->as.cmd.err);
+            free_ptrv((void **) node->as.cmd.io, free_redir_adapter);
             break;
         case NODE_AND:
         case NODE_OR:
@@ -38,21 +46,343 @@ void free_ast_node(ast_node *node) {
     free(node);
 }
 
+void free_ast_node_adapter(void *p) {
+    free_ast_node((ast_node *) p);
+}
+
+void print_ast(const ast_node *root, int depth) {
+    if (!root) return;
+
+    for (int i = 0; i < depth; ++i) putchar('-');
+    putchar(' ');
+
+    switch (root->type) {
+        case NODE_SEQ:
+            printf("NODE_SEQ\n");
+            for (ast_node **it = root->as.list.children; *it != NULL; ++it)
+                print_ast(*it, depth + 2);
+            break;
+
+        case NODE_PIPE:
+            printf("NODE_PIPE\n");
+            for (ast_node **it = root->as.list.children; *it != NULL; ++it)
+                print_ast(*it, depth + 2);
+            break;
+
+        case NODE_AND:
+            printf("NODE_AND\n");
+            print_ast(root->as.binary.left, depth + 2);
+            print_ast(root->as.binary.right, depth + 2);
+            break;
+
+        case NODE_OR:
+            printf("NODE_OR\n");
+            print_ast(root->as.binary.left, depth + 2);
+            print_ast(root->as.binary.right, depth + 2);
+            break;
+
+        case NODE_BG:
+            printf("BACKGROUND\n");
+            print_ast(root->as.bg.child, depth + 2);
+            break;
+
+        case NODE_CMD:
+            printf("[ ");
+            for (char **it = root->as.cmd.argv; *it != NULL; ++it)
+                printf("\"%s\" ", *it);
+            printf("] ");
+            if (*root->as.cmd.io) printf("I/O: ");
+            for (redir **it = root->as.cmd.io; *it != NULL; ++it) {
+                printf("%d%s%s ",
+                       (*it)->fd,
+                       (*it)->type == REDIR_IN ? "<" : (*it)->type == REDIR_OUT ? ">" : ">>",
+                       (*it)->filename);
+            }
+            printf("\n");
+            break;
+    }
+}
+
+// Parser Helper functions
+
+static int parse_fd(const char *data, int *out) {
+    char *end = NULL;
+    long v = 0;
+    if (!data || *data == 0x00) return -1;
+
+    errno = 0;
+    v = strtol(data, &end, 10);
+    if (errno != 0 || *end != 0x00 || v < 0 || v > INT_MAX) return -1;
+    *out = (int) v;
+
+    return 0;
+}
+
+static ast_node *parse_cmd(lex_token **l, lex_token **r) {
+    ast_node *leaf = NULL;
+    int *consumed = NULL;
+
+    if (l == r) goto cleanup;
+
+    leaf = calloc(1, sizeof(ast_node));
+    if (!leaf) goto cleanup;
+    leaf->type = NODE_CMD;
+
+    int iocnt = 0;
+    for (lex_token **it = l; it != r; ++it) {
+        iocnt += (*it)->type == TK_REDIR_IN ||
+                (*it)->type == TK_REDIR_OUT ||
+                (*it)->type == TK_REDIR_APPEND;
+    }
+
+    leaf->as.cmd.io = calloc(iocnt + 1, sizeof(redir *));
+    if (!leaf->as.cmd.io) goto cleanup;
+    int i = 0;
+
+    consumed = calloc(r - l, sizeof(int));
+    if (!consumed) goto cleanup;
+
+    for (lex_token **it = l; it != r; ++it) {
+        if ((*it)->type != TK_REDIR_IN &&
+            (*it)->type != TK_REDIR_OUT &&
+            (*it)->type != TK_REDIR_APPEND)
+            continue;
+
+        // Allocate memory
+        redir *io = calloc(1, sizeof(redir));
+        if (!io) goto cleanup;
+
+        leaf->as.cmd.io[i++] = io;
+
+        // Set type and default fd
+        if ((*it)->type == TK_REDIR_IN) {
+            io->type = REDIR_IN;
+            io->fd = 0;
+        } else if ((*it)->type == TK_REDIR_OUT) {
+            io->type = REDIR_OUT;
+            io->fd = 1;
+        } else {
+            io->type = REDIR_APPEND;
+            io->fd = 1;
+        }
+        consumed[it - l] = 1; // mark token as consumed.
+
+        // Check and set the file name
+        if (*(it + 1) == NULL || (*(it + 1))->type != TK_DEFAULT) goto cleanup;
+        io->filename = strdup((*(it + 1))->data);
+        if (!io->filename) goto cleanup;
+        consumed[it - l + 1] = 1; // mark filename as consumed
+
+        // Check and set fd
+        int fd = 0;
+        if (
+            l < it && // not for first token ( no valid token before )
+            (*(it - 1))->type == TK_DEFAULT && // should be default token (text)
+            (*(it - 1))->next_adj && // should be adjacent
+            !parse_fd((*(it - 1))->data, &fd) // valid fd
+        ) {
+            io->fd = fd;
+            consumed[it - l - 1] = 1; // mark fd as consumed
+        }
+    }
+
+    int argc = 0;
+    for (lex_token **it = l; it != r; ++it)
+        argc += !consumed[it - l];
+
+    leaf->as.cmd.argv = calloc(argc + 1, sizeof(char *));
+    if (!leaf->as.cmd.argv) goto cleanup;
+
+    int idx = 0;
+    for (lex_token **it = l; it != r; ++it) {
+        if (!consumed[it - l]) {
+            if ((*it)->type != TK_DEFAULT || (*it)->data != NULL) goto cleanup;
+            leaf->as.cmd.argv[idx++] = strdup((*it)->data);
+            if (!leaf->as.cmd.argv[idx - 1]) goto cleanup;
+        }
+    }
+
+    leaf->as.cmd.argv[argc] = NULL;
+
+    free(consumed);
+    return leaf;
+
+cleanup:
+    free(consumed);
+    free_ast_node(leaf);
+    return NULL;
+}
+
+static ast_node *parse_pipe(lex_token **l, lex_token **r) {
+    ast_node *root = NULL;
+
+    if (l == r) goto cleanup;
+
+    int cnt = 0;
+    for (lex_token **it = l; it != r; ++it)
+        cnt += (*it)->type == TK_PIPE;
+
+    // not a pipe
+    if (!cnt)
+        return parse_cmd(l, r);
+
+    root = malloc(sizeof(ast_node));
+    if (!root) goto cleanup;
+    root->type = NODE_PIPE;
+    root->as.list.children = NULL; // safe cleanup
+
+    // cnt+1 segment + 1 NULL terminator
+    root->as.list.children = calloc(cnt + 2, sizeof(ast_node *));
+    if (!root->as.list.children) goto cleanup;
+
+
+    int i = 0;
+    lex_token **ll = l;
+    for (lex_token **rr = l; 1; ++rr) {
+        if (rr != r && (*rr)->type != TK_PIPE) continue;
+
+        root->as.list.children[i] = parse_cmd(ll, rr);
+        if (!root->as.list.children[i]) goto cleanup;
+        ll = rr + 1;
+        ++i;
+        if (rr == r) break;
+    }
+
+    return root;
+cleanup:
+    free_ast_node(root);
+    return NULL;
+}
+
+static int parse_and_or(lex_token **l, lex_token **r, ast_node **result) {
+    // Predefine with NULL pointers to have safe cleanup
+    *result = NULL;
+    ast_node *child = NULL;
+    ast_node *tail = NULL;
+
+    if (l == r) return 1; // Empty segment
+
+    // Check if it is and_or node
+    int cnt = 0;
+    for (lex_token **it = l; it != r; ++it)
+        cnt += (*it)->type == TK_AND || (*it)->type == TK_OR;
+
+    // Not an and_or node
+    if (cnt == 0) {
+        *result = parse_pipe(l, r);
+        if (!(*result)) return -1;
+        return 0;
+    }
+
+    lex_token **ll = l;
+    for (lex_token **rr = l; rr != r; ++rr) {
+        if ((*rr)->type != TK_AND && (*rr)->type != TK_OR) continue;
+
+        // Allocate memory
+        child = malloc(sizeof(ast_node));
+        if (!child) goto cleanup;
+
+        // Set type
+        if ((*rr)->type == TK_AND) child->type = NODE_AND;
+        else child->type = NODE_OR;
+
+        // Parse the child
+        child->as.binary.left = parse_pipe(ll, rr);
+        child->as.binary.right = NULL; // safe cleanup
+        if (!child->as.binary.left) goto cleanup;
+
+        // Add to tree
+        if (!tail) {
+            tail = child; // init tail
+            *result = tail; // also head
+        } else {
+            tail->as.binary.right = child; // child
+            tail = child; // move tail
+        }
+
+        child = NULL; // avoid double free on cleanup
+
+        ll = rr + 1;
+    }
+    // only one segment ( impossible ) but just in case.
+    if (!tail) goto cleanup;
+
+    tail->as.binary.right = parse_pipe(ll, r);
+    if (!tail->as.binary.right) goto cleanup;
+
+    return 0;
+
+cleanup:
+    free_ast_node(child);
+    free_ast_node(*result);
+    *result = NULL;
+    return -1;
+}
+
 // Parser
 
 ast_node *parse_line(const char *line) {
     if (!line) return NULL;
 
-    lex_token **tokens = lex_line(line);
-    if (!tokens) return NULL;
+    // predefine to avoid ambiguity on cleanup
+    ast_node *root = NULL;
+    ast_node *child = NULL;
 
-    for (lex_token **tok = tokens; *tok != NULL; ++tok) {
-        print_token(*tok);
-        printf(" ");
+    // Tokenization
+    lex_token **tokens = lex_line(line);
+    if (!tokens) goto cleanup;
+
+    int mxcnt = 1;
+    for (lex_token **it = tokens; *it != NULL; ++it) {
+        mxcnt += (*it)->type == TK_SEMICOLON || (*it)->type == TK_BG;
     }
-    printf("\n");
+
+    // Allocate the root ( NODE_SEQ )
+    root = malloc(sizeof(ast_node));
+    if (!root) goto cleanup;
+
+    root->type = NODE_SEQ;
+    root->as.list.children = calloc(mxcnt + 1, sizeof(ast_node *));
+    if (!root->as.list.children) goto cleanup;
+
+    int i = 0;
+    lex_token **l = tokens;
+    for (lex_token **r = tokens; 1; ++r) {
+        if (*r != NULL && (*r)->type != TK_SEMICOLON && (*r)->type != TK_BG) continue;
+
+        int res = parse_and_or(l, r, &child);
+        if (res == -1) goto cleanup;
+        if (res == 1) {
+            if (*r == NULL)
+                break;
+            goto cleanup;
+        }
+
+        if (*r != NULL && (*r)->type == TK_BG) {
+            ast_node *bg = malloc(sizeof(ast_node));
+            if (!bg) goto cleanup;
+            bg->type = NODE_BG;
+            bg->as.bg.child = child;
+            root->as.list.children[i++] = bg;
+        } else {
+            root->as.list.children[i++] = child;
+        }
+
+        child = NULL; // avoid double free on error
+
+        l = r + 1;
+
+        if (*r == NULL) break;
+    }
+
 
     free_ptrv((void **) tokens, free_lex_token_adapter);
 
-    return NULL; // temporary
+    return root;
+
+cleanup:
+    free_ptrv((void **) tokens, free_lex_token_adapter);
+    free_ast_node(child);
+    free_ast_node(root);
+    return NULL;
 }

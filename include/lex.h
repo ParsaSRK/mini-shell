@@ -4,7 +4,7 @@
 // Lexer Structures
 
 /**
- * @brief Lexing FSM used by the lexer.
+ * @brief Lexer state machine.
  */
 typedef enum lex_state {
     LEX_DEFAULT, ///< normal state
@@ -17,7 +17,7 @@ typedef enum lex_state {
  * @brief Token type produced by the lexer
  */
 typedef enum lex_token_type {
-    TK_DEFAULT, ///< regular word token
+    TK_DEFAULT, ///< regular word token (argv, io filename, io fd)
     TK_SEMICOLON, ///< semicolon token ';'
     TK_PIPE, ///< pipe token '|'
     TK_BG, ///< background token '&'
@@ -29,27 +29,25 @@ typedef enum lex_token_type {
 } lex_token_type;
 
 /**
- * @brief Lexer token holding type and text.
- *
+ * @brief Lexer token
  */
 typedef struct lex_token {
     lex_token_type type; ///< Token classification
-    char *data; ///< Heap-allocated token text (or NULL for operators).
+    char *data; ///< Heap-allocated token Cstring for TK_DEFAULT, otherwise NULL.
     int next_adj; ///< Nonzero when adjacent to the next token (no whitespace).
 } lex_token;
 
 /**
- * @brief Token buffer used while building the current word token.
+ * @brief Token buffer used by lexer to build each token.
  */
 typedef struct lex_token_buf {
-    char *data; ///< Heap-allocated, NUL-terminated character buffer.
+    char *data; ///< Heap-allocated, Cstring buffer.
     size_t len; ///< Current length in use (excluding NUL).
     size_t cap; ///< Allocated capacity of buf.
 } lex_token_buf;
 
 /**
- * @brief Dynamic list of lex_token pointers.
- * NULL-terminated when tokenization completes.
+ * @brief NULL-terminated Dynamic list of lex_token pointers.
  */
 typedef struct lex_token_list {
     lex_token **data; ///< Heap-allocated, NULL-terminated tokens list.

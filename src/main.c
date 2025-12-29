@@ -36,6 +36,8 @@ int main(void) {
 
         ast_node *root = parse_line(line);
 
+        print_ast(root, 0);
+
         free_ast_node(root);
         free(line);
     }

@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 
-// Lexer Structures
+// Character set used.
 
 static const char lex_whitespaces[] = " \n\t";
 static const char lex_operators[] = ";|&<>";
@@ -57,7 +57,7 @@ static int token_push(lex_token_list *list, lex_token *token) {
 }
 
 /**
- * appends a single character to token buffer
+ * @brief appends a single character to token buffer
  *
  * @param buf token buffer being built
  * @param c character being pushed
