@@ -11,7 +11,7 @@ int main(void) {
         // Find CWD
         char *cwd = getcwd(NULL, 0);
         if (cwd == NULL) {
-            perror("getcwd");
+            perror("main: getcwd");
             return 1;
         }
 
@@ -29,7 +29,7 @@ int main(void) {
                 printf("\n");
                 break;
             }
-            perror("getline");
+            perror("main: getline");
             continue;
         }
 

@@ -33,13 +33,13 @@ void free_lex_token_adapter(void *p) {
  */
 static int token_push(lex_token_list *list, lex_token *token) {
     if (!list) {
-        fprintf(stderr, "NULL token list!\n");
+        fprintf(stderr, "token_push: NULL token list!\n");
         return -1;
     }
     if (list->cap == 0) {
         lex_token **temp = realloc(list->data, 4 * sizeof(lex_token *));
         if (!temp) {
-            perror("realloc");
+            perror("token_push: realloc");
             return -1;
         }
         list->data = temp;
@@ -47,7 +47,7 @@ static int token_push(lex_token_list *list, lex_token *token) {
     } else if (list->len + 2 > list->cap) {
         lex_token **temp = realloc(list->data, 2 * list->cap * sizeof(lex_token *));
         if (!temp) {
-            perror("realloc");
+            perror("token_push: realloc");
             return -1;
         }
         list->data = temp;
@@ -68,13 +68,13 @@ static int token_push(lex_token_list *list, lex_token *token) {
  */
 static int buf_push(lex_token_buf *buf, char c) {
     if (!buf) {
-        fprintf(stderr, "NULL buffer!\n");
+        fprintf(stderr, "buf_push: NULL buffer!\n");
         return -1;
     }
     if (buf->cap == 0) {
         char *temp = realloc(buf->data, 4 * sizeof(char));
         if (!temp) {
-            perror("realloc");
+            perror("buf_push: realloc");
             return -1;
         }
         buf->data = temp;
@@ -82,7 +82,7 @@ static int buf_push(lex_token_buf *buf, char c) {
     } else if (buf->len + 2 > buf->cap) {
         char *temp = realloc(buf->data, 2 * buf->cap * sizeof(char));
         if (!temp) {
-            perror("realloc");
+            perror("buf_push: realloc");
             return -1;
         }
         buf->data = temp;
@@ -131,7 +131,7 @@ static lex_token *get_token(const char **c) {
     // Allocate operator token
     lex_token *tok = malloc(sizeof(lex_token));
     if (!tok) {
-        perror("malloc");
+        perror("get_token: malloc");
         goto cleanup;
     }
 
@@ -166,7 +166,7 @@ static lex_token *get_token(const char **c) {
             }
             break;
         default:
-            fprintf(stderr, "Unrecognized operator!\n");
+            fprintf(stderr, "get_token: Unrecognized operator!\n");
             goto cleanup;
     }
 
@@ -196,7 +196,7 @@ lex_token **lex_line(const char *str) {
     lex_token *tok = NULL;
 
     if (!list.data) {
-        perror("malloc");
+        perror("lex_line: malloc");
         goto cleanup;
     }
 
@@ -229,7 +229,7 @@ lex_token **lex_line(const char *str) {
                     // Allocate token
                     tok = malloc(sizeof(lex_token));
                     if (!tok) {
-                        perror("malloc");
+                        perror("lex_line: malloc");
                         goto cleanup;
                     }
 
@@ -260,7 +260,7 @@ lex_token **lex_line(const char *str) {
                 break;
             case LEX_SINGLE_QUOTE:
                 if (*c == 0x00) {
-                    fprintf(stderr, "Unterminated single quotation.");
+                    fprintf(stderr, "lex_line: Unterminated single quotation.");
                     goto cleanup;
                 }
                 if (*c == '\'') {
@@ -272,7 +272,7 @@ lex_token **lex_line(const char *str) {
 
             case LEX_DOUBLE_QUOTE:
                 if (*c == 0x00) {
-                    fprintf(stderr, "Unterminated double quotation.");
+                    fprintf(stderr, "lex_line: Unterminated double quotation.");
                     goto cleanup;
                 }
                 if (*c == '\"') {
@@ -304,7 +304,7 @@ lex_token **lex_line(const char *str) {
                         }
                         break;
                     default:
-                        fprintf(stderr, "invalid esc_from.");
+                        fprintf(stderr, "lex_line: invalid esc_from.");
                         goto cleanup;
                 }
                 state = esc_from;
@@ -354,7 +354,7 @@ void print_token(lex_token *tok) {
             printf("OR(adj=%d)", tok->next_adj);
             break;
         default:
-            fprintf(stderr, "Invalid token type!\n");
+            fprintf(stderr, "print_token: Invalid token type!\n");
             break;
     }
 }
