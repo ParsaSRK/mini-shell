@@ -110,6 +110,12 @@ void print_ast(const ast_node *root, int depth) {
 
 // Parser Helper functions
 
+/**
+ * @brief Used to parse file descriptor associated with redirection operator.
+ * @param data token data before operator
+ * @param out resulting fd in integer
+ * @return non-zero if its not valid file descriptor
+ */
 static int parse_fd(const char *data, int *out) {
     char *end = NULL;
     long v = 0;
@@ -123,6 +129,14 @@ static int parse_fd(const char *data, int *out) {
     return 0;
 }
 
+/**
+ * @brief used to parse sequence of token pointers as valid NODE_CMD
+ * from l to r. Inclusive at l but exclusive at r.
+ *
+ * @param l first token pointer
+ * @param r last token pointer (non-inclusive)
+ * @return Heap-allocated parsed ast_node, or NULL on error.
+ */
 static ast_node *parse_cmd(lex_token **l, lex_token **r) {
     ast_node *leaf = NULL;
     int *consumed = NULL;
@@ -246,6 +260,15 @@ cleanup:
     return NULL;
 }
 
+/**
+ * @brief Used to parse a sequence of token pointers as a NODE_PIPE
+ * from l to r. Inclusive at l but exclusive at r.
+ * If no pipe operator found, it will parse as a command.
+ *
+ * @param l first token pointer
+ * @param r last token pointer (non-inclusive)
+ * @return Heap-allocated parsed ast_node, or NULL on error.
+ */
 static ast_node *parse_pipe(lex_token **l, lex_token **r) {
     ast_node *root = NULL;
 
@@ -295,6 +318,16 @@ cleanup:
     return NULL;
 }
 
+/**
+ * @brief Used to parse a sequence of token pointers as a NODE_AND/NODE_OR
+ * from l to r. Inclusive at l but exclusive at r.
+ * If no && or || operator found, it will parse as a pipe.
+ *
+ * @param l first token pointer
+ * @param r last token pointer (non-inclusive)
+ * @param result Heap allocated parsed ast_node, or NULL on error / empty segment.
+ * @return 0: successful, 1: empty segment, -1: error
+ */
 static int parse_and_or(lex_token **l, lex_token **r, ast_node **result) {
     // Predefine with NULL pointers to have safe cleanup
     *result = NULL;

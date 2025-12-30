@@ -33,8 +33,13 @@ $(BUILDDIR)/%.o: src/%.c | $(BUILDDIR)
 $(TARGET): $(OBJ)
 	$(CC) $(OBJ) -o $@ $(LDFLAGS)
 
-.PHONY: all clean
+.PHONY: all clean docs clean-docs
 
 clean:
 	rm -rf $(BUILDDIR)
 
+docs:
+	doxygen Doxyfile
+
+clean-docs:
+	rm -rf docs
