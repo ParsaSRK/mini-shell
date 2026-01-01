@@ -2,11 +2,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 
+#include "exec.h"
 #include "parse.h"
 
+void init_signals(void) {
+    signal(SIGINT, SIG_IGN);
+    signal(SIGTSTP, SIG_IGN);
+    signal(SIGTTOU, SIG_IGN);
+    signal(SIGTTIN, SIG_IGN);
+}
 
 int main(void) {
+    init_signals();
     while (1) {
         // Find CWD
         char *cwd = getcwd(NULL, 0);
@@ -36,6 +45,10 @@ int main(void) {
         ast_node *root = parse_line(line);
 
         print_ast(root, 0);
+
+        int status = 0;
+        execute_ast(root, &status);
+        printf("Exit code: %d\n", status);
 
         free_ast_node(root);
         free(line);
