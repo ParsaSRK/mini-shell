@@ -46,7 +46,7 @@ typedef struct bg_node {
 typedef enum redir_type {
     REDIR_IN, ///< '<'
     REDIR_OUT, ///< '>'
-    REDIR_APPEND ///< '<<'
+    REDIR_APPEND ///< '>>'
 } redir_type;
 
 /**

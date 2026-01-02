@@ -8,7 +8,8 @@ typedef struct builtin_cmd {
     builtin_fn fn;
 } builtin_cmd;
 
-int exit_fn(cmd_node *node, int *status);
+int exit_fn(cmd_node *node, int *_);
+int cd_fn(cmd_node *node, int *status);
 
 int is_builtin(cmd_node *node);
 

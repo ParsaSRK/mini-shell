@@ -9,6 +9,7 @@
 
 
 #include "builtin.h"
+#include "utils.h"
 
 int execute_seq(ast_node *node, int *status) {
     if (!node || node->type != NODE_SEQ) {
@@ -54,27 +55,10 @@ int execute_cmd(ast_node *node, int *status) {
 
     // Child process
     if (pid == 0) {
-        // Setup redirections
-        if (node->as.cmd.io) {
-            for (redir **it = node->as.cmd.io; *it != NULL; ++it) {
-                int flags = 0;
-                if ((*it)->type == REDIR_IN) flags = O_RDONLY;
-                else if ((*it)->type == REDIR_OUT) flags = O_WRONLY | O_CREAT | O_TRUNC;
-                else flags = O_WRONLY | O_CREAT | O_APPEND;
 
-                int fd = open((*it)->path, flags, 0644);
-                if (fd == -1) {
-                    perror("open");
-                    _exit(1);
-                }
-                if (dup2(fd, (*it)->fd) == -1) {
-                    perror("dup2");
-                    close(fd);
-                    _exit(1);
-                }
-                close(fd);
-            }
-        }
+        // Setup redirections
+        if (node->as.cmd.io && apply_redir(&node->as.cmd) == -1)
+            _exit(127);
 
         // Change process image
         execvp(node->as.cmd.argv[0], node->as.cmd.argv);
