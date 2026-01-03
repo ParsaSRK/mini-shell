@@ -4,6 +4,16 @@
 
 
 
+
+/**
+ * @brief Executes a NODE_CMD and returns its exit code.
+ *
+ * @param node NODE_CMD to be run.
+ * @param status shell-style exit code if successfully executed.
+ * @return non-zero if failed (internal error).
+ */
+int execute_cmd(ast_node *node, int *status);
+
 /**
  * @brief Executes a NODE_SEQ and returns the last command's exit code.
  *
@@ -14,15 +24,6 @@
  * @return non-zero if failed (internal error).
  */
 int execute_seq(ast_node *node, int *status);
-
-/**
- * @brief Executes a NODE_CMD and returns its exit code.
- *
- * @param node NODE_CMD to be run.
- * @param status shell-style exit code if successfully executed.
- * @return non-zero if failed (internal error).
- */
-int execute_cmd(ast_node *node, int *status);
 
 /**
  * @brief Executes a NODE_AND and returns the exit code of the last executed child.

@@ -7,12 +7,7 @@
 #include "exec.h"
 #include "parse.h"
 
-void init_signals(void) {
-    signal(SIGINT, SIG_IGN);
-    signal(SIGTSTP, SIG_IGN);
-    signal(SIGTTOU, SIG_IGN);
-    signal(SIGTTIN, SIG_IGN);
-}
+#include "utils.h"
 
 int main(void) {
     init_signals();

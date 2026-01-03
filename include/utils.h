@@ -2,6 +2,11 @@
 
 #include "parse.h"
 
+typedef enum redir_mode {
+    REDIR_TEMPORARY,
+    REDIR_PERMANENTLY
+} apply_redir_mode;
+
 /**
  * @brief Free a NULL-terminated array of pointers.
  *
@@ -10,6 +15,10 @@
  */
 void free_ptrv(void **arr, void (*destroy)(void *));
 
-int apply_redir(cmd_node *node);
+int apply_redir(cmd_node *node, apply_redir_mode mode);
 
 void undo_redir(void);
+
+void init_signals(void);
+
+void reset_signals(void);

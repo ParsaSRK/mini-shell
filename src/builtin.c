@@ -99,7 +99,7 @@ int run_builtin(cmd_node *node, int *status) {
         return -1;
     }
 
-    if (node->io && apply_redir(node) == -1)
+    if (node->io && apply_redir(node, REDIR_TEMPORARY) == -1)
         return -1;
 
     for (builtin_cmd *it = builtins; it->name != NULL; ++it) {
