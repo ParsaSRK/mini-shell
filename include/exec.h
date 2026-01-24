@@ -1,8 +1,7 @@
 #pragma once
 
 #include "parse.h"
-
-
+#include "job.h"
 
 
 /**
@@ -10,9 +9,20 @@
  *
  * @param node NODE_CMD to be run.
  * @param status shell-style exit code if successfully executed.
+ * @param isbg whether the node should be run in background.
  * @return non-zero if failed (internal error).
  */
-int execute_cmd(ast_node *node, int *status);
+int execute_cmd(ast_node *node, int *status, int isbg);
+
+/**
+ * @brief Executes a NODE_PIPE and returns its exit code.
+ *
+ * @param node NODE_PIPE to be run.
+ * @param status shell-style exit code if successfully executed.
+ * @param isbg whether the node should be run in background.
+ * @return non-zero if failed (internal error).
+ */
+int execute_pipe(ast_node *node, int *status, int isbg);
 
 /**
  * @brief Executes a NODE_SEQ and returns the last command's exit code.
@@ -47,11 +57,14 @@ int execute_and(ast_node *node, int *status);
  */
 int execute_or(ast_node *node, int *status);
 
+int exec_bg(ast_node *node, int *status);
+
 /**
  * @brief Dispatches execution based on node type.
  *
  * @param node AST node to be run.
  * @param status shell-style exit code (0-255) if successfully executed.
+ * @param isbg whether the node should be run in background.
  * @return non-zero if failed (internal error).
  */
-int execute_ast(ast_node *node, int *status);
+int execute_ast(ast_node *node, int *status, int isbg);

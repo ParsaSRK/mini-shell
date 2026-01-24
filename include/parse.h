@@ -114,17 +114,18 @@ void free_ast_node(ast_node *node);
 void free_ast_node_adapter(void *p);
 
 /**
- * @brief recursively prints nodes of a valid AST tree.
- *
- * @param root Root node of the AST tree
- * @param depth current depth of the node (default = 0, used for indentation)
- */
-void print_ast(const ast_node *root, int depth);
-
-/**
  * @brief Parses a line of input to an AST
  *
  * @param str line of input
  * @return Heap-allocated lexed and parsed AST
  */
 ast_node *parse_line(const char *str);
+
+
+/**
+ * @brief recursively prints nodes of a valid AST tree.
+ *
+ * @param root Root node of the AST tree
+ * @param depth current depth of the node (default = 0, used for indentation)
+ */
+void print_ast(const ast_node *root, int depth);

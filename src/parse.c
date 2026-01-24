@@ -52,61 +52,6 @@ void free_ast_node_adapter(void *p) {
     free_ast_node((ast_node *) p);
 }
 
-void print_ast(const ast_node *root, int depth) {
-    if (!root) return;
-
-    for (int i = 0; i < depth; ++i) putchar('-');
-    putchar(' ');
-
-    switch (root->type) {
-        case NODE_SEQ:
-            printf("NODE_SEQ\n");
-            for (ast_node **it = root->as.list.children; *it != NULL; ++it)
-                print_ast(*it, depth + 2);
-            break;
-
-        case NODE_PIPE:
-            printf("NODE_PIPE\n");
-            for (ast_node **it = root->as.list.children; *it != NULL; ++it)
-                print_ast(*it, depth + 2);
-            break;
-
-        case NODE_AND:
-            printf("NODE_AND\n");
-            print_ast(root->as.binary.left, depth + 2);
-            print_ast(root->as.binary.right, depth + 2);
-            break;
-
-        case NODE_OR:
-            printf("NODE_OR\n");
-            print_ast(root->as.binary.left, depth + 2);
-            print_ast(root->as.binary.right, depth + 2);
-            break;
-
-        case NODE_BG:
-            printf("BACKGROUND\n");
-            print_ast(root->as.bg.child, depth + 2);
-            break;
-
-        case NODE_CMD:
-            printf("[ ");
-            for (char **it = root->as.cmd.argv; *it != NULL; ++it)
-                printf("\"%s\" ", *it);
-            printf("] ");
-            if (*root->as.cmd.io) printf("I/O: ");
-            for (redir **it = root->as.cmd.io; *it != NULL; ++it) {
-                printf("%d%s%s ",
-                       (*it)->fd,
-                       (*it)->type == REDIR_IN ? "<" : (*it)->type == REDIR_OUT ? ">" : ">>",
-                       (*it)->path);
-            }
-            printf("\n");
-            break;
-
-        default:
-            fprintf(stderr, "print_ast: Invalid node type!\n");
-    }
-}
 
 // Parser Helper functions
 
@@ -464,4 +409,61 @@ cleanup:
     free_ast_node(child);
     free_ast_node(root);
     return NULL;
+}
+
+
+void print_ast(const ast_node *root, int depth) {
+    if (!root) return;
+
+    for (int i = 0; i < depth; ++i) putchar('-');
+    putchar(' ');
+
+    switch (root->type) {
+        case NODE_SEQ:
+            printf("NODE_SEQ\n");
+            for (ast_node **it = root->as.list.children; *it != NULL; ++it)
+                print_ast(*it, depth + 2);
+            break;
+
+        case NODE_PIPE:
+            printf("NODE_PIPE\n");
+            for (ast_node **it = root->as.list.children; *it != NULL; ++it)
+                print_ast(*it, depth + 2);
+            break;
+
+        case NODE_AND:
+            printf("NODE_AND\n");
+            print_ast(root->as.binary.left, depth + 2);
+            print_ast(root->as.binary.right, depth + 2);
+            break;
+
+        case NODE_OR:
+            printf("NODE_OR\n");
+            print_ast(root->as.binary.left, depth + 2);
+            print_ast(root->as.binary.right, depth + 2);
+            break;
+
+        case NODE_BG:
+            printf("BACKGROUND\n");
+            print_ast(root->as.bg.child, depth + 2);
+            break;
+
+        case NODE_CMD:
+            printf("[ ");
+            for (char **it = root->as.cmd.argv; *it != NULL; ++it)
+                printf("\"%s\" ", *it);
+            printf("] ");
+            if (*root->as.cmd.io) printf("I/O: ");
+            for (redir **it = root->as.cmd.io; *it != NULL; ++it) {
+                printf("%d%s%s ",
+                       (*it)->fd,
+                       (*it)->type == REDIR_IN ? "<" : (*it)->type == REDIR_OUT ? ">" : ">>",
+                       (*it)->path);
+            }
+            printf("\n");
+            break;
+
+        default:
+            fprintf(stderr, "print_ast: Invalid node type!\n");
+    }
 }

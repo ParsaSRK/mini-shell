@@ -1,14 +1,15 @@
 #include "exec.h"
 
+#include <errno.h>
+#include <signal.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <asm-generic/errno-base.h>
 
 #include "parse.h"
-
-
+#include "redir.h"
 #include "builtin.h"
 #include "utils.h"
 
@@ -26,7 +27,6 @@ static void exec_child(cmd_node *cmd) {
     if (cmd->io && apply_redir(cmd, REDIR_PERMANENTLY))
         goto cleanup;
 
-
     // Execute
     execvp(cmd->argv[0], cmd->argv);
     perror("execvp");
@@ -34,8 +34,7 @@ cleanup:
     _exit(127);
 }
 
-
-int execute_cmd(ast_node *node, int *status) {
+int execute_cmd(ast_node *node, int *status, int isbg) {
     // Invalid node
     if (!node || node->type != NODE_CMD) {
         fprintf(stderr, "execute_cmd: Wrong node type!\n");
@@ -53,35 +52,104 @@ int execute_cmd(ast_node *node, int *status) {
     if (is_builtin(&node->as.cmd))
         return run_builtin(&node->as.cmd, status);
 
-    pid_t pid = fork();
-    if (pid == -1) {
-        perror("fork");
+    int jid = getId();
+    if (jid == -1) {
+        fprintf(stderr, "execute_cmd: Job table full!\n");
         return -1;
     }
 
-    // Child process
-    if (pid == 0) {
-        exec_child(&node->as.cmd);
-        _exit(127); // unreachable technically
+    pid_t pid = fork();
+    switch (pid) {
+        case -1: // Error
+            perror("fork");
+            return -1;
+
+        case 0: // Child Process
+            if (setpgid(0, 0) == -1) {
+                perror("execute_cmd: setpgid");
+                _exit(127);
+            }
+            exec_child(&node->as.cmd);
+            _exit(127); // unreachable technically
+
+        default:
+            break;
     }
 
     // Parent process
-    int wstatus;
-    if (waitpid(pid, &wstatus, 0) == -1) {
-        perror("waitpid");
+
+    // Set process group ID
+    if (setpgid(pid, pid) == -1 && errno != EACCES && errno != EINTR) {
+        perror("execute_cmd: setpgid");
         return -1;
     }
 
+    // Allocate a job
+    job *j = malloc(sizeof(job));
+    if (!j) {
+        perror("execute_cmd: malloc");
+        return -1;
+    }
+    j->procs = malloc(sizeof(process));
+    if (!j->procs) {
+        perror("execute_cmd: malloc");
+        free(j);
+        return -1;
+    }
+
+    // Build job's process description
+    j->nproc = 1;
+    j->procs[0].state = PROC_RUN;
+    j->procs[0].pid = pid;
+    j->procs[0].exit_code = -1;
+    j->procs[0].term_sig = -1;
+
+    // Build job description
+    j->id = jid;
+    j->isbg = isbg;
+    j->pgid = pid;
+    j->isupd = 0;
+    j->next = NULL;
+    j->state = JOB_RUNNING;
+
+    add_job(j);
+
+    // dont want for finish if bg
+    if (isbg)
+        return 0;
+
+    // Pass the terminal
+    if (isatty(STDIN_FILENO) && tcsetpgrp(STDIN_FILENO, pid) == -1)
+        perror("execute_cmd: tcsetpgrp");
+
+    // Wait for child
+    int wstatus;
+    if (waitpid(pid, &wstatus, WUNTRACED) == -1) {
+        perror("execute_cmd: waitpid");
+        // Reclaim terminal before returning
+        if (isatty(STDIN_FILENO) && tcsetpgrp(STDIN_FILENO, getpgrp()) == -1) perror("execute_cmd: tcsetpgrp");
+        return -1; // No cleanup, ownership is for jobs.c
+    }
+
+    // Reclaim the terminal
+    if (isatty(STDIN_FILENO) && tcsetpgrp(STDIN_FILENO, getpgrp()) == -1)
+        perror("execute_cmd: tcsetpgrp");
+
+    // Update jobs and processes
+    if (update_proc(pid, wstatus) == -1) return -1; // No cleanup, ownership is for job.c
+
     // set exit status code
     if (status) {
-        if (WIFEXITED(wstatus)) *status = WEXITSTATUS(wstatus);
-        else if (WIFSIGNALED(wstatus)) *status = 128 + WTERMSIG(wstatus);
-        else *status = 1;
+        if (j->procs[0].exit_code != -1)
+            *status = j->procs[0].exit_code;
+        else if (j->procs[0].term_sig != -1)
+            *status = 128 + j->procs[0].term_sig;
     }
+
     return 0;
 }
 
-int execute_pipe(ast_node *node, int *status) {
+int execute_pipe(ast_node *node, int *status, int isbg) {
     int **pipes = NULL;
     pid_t *pids = NULL;
 
@@ -208,7 +276,7 @@ int execute_seq(ast_node *node, int *status) {
     }
 
     for (ast_node **it = node->as.list.children; *it != NULL; ++it) {
-        int ret = execute_ast(*it, status);
+        int ret = execute_ast(*it, status, 0);
         if (ret != 0) return ret;
     }
     return 0;
@@ -225,7 +293,7 @@ int execute_and(ast_node *node, int *status) {
     }
 
     int wstatus = 0;
-    int ret = execute_ast(node->as.binary.left, &wstatus);
+    int ret = execute_ast(node->as.binary.left, &wstatus, 0);
     if (ret != 0)
         return ret;
 
@@ -234,7 +302,7 @@ int execute_and(ast_node *node, int *status) {
         return 0;
     }
 
-    return execute_ast(node->as.binary.right, status);
+    return execute_ast(node->as.binary.right, status, 0);
 }
 
 int execute_or(ast_node *node, int *status) {
@@ -248,7 +316,7 @@ int execute_or(ast_node *node, int *status) {
     }
 
     int wstatus = 0;
-    int ret = execute_ast(node->as.binary.left, &wstatus);
+    int ret = execute_ast(node->as.binary.left, &wstatus, 0);
     if (ret != 0)
         return ret;
 
@@ -257,18 +325,38 @@ int execute_or(ast_node *node, int *status) {
         return 0;
     }
 
-    return execute_ast(node->as.binary.right, status);
+    return execute_ast(node->as.binary.right, status, 0);
 }
 
-int execute_ast(ast_node *node, int *status) {
+int execute_bg(ast_node *node, int *status) {
+    if (!node || node->type != NODE_BG) {
+        fprintf(stderr, "execute_bg: Wrong node type!\n");
+        return -1;
+    }
+
+    if (!node->as.bg.child) {
+        fprintf(stderr, "execute_bg: Wrong node data!\n");
+        return -1;
+    }
+
+    if (node->as.bg.child->type != NODE_PIPE && node->as.bg.child->type != NODE_CMD) {
+        fprintf(stderr, "execute_bg: Only regular commands and pipes are allowed as background operation!\n");
+        if (status) *status = 1;
+        return 1;
+    }
+
+    return execute_ast(node->as.bg.child, status, 1);
+}
+
+int execute_ast(ast_node *node, int *status, int isbg) {
     if (!node) return -1;
     switch (node->type) {
         case NODE_CMD:
-            return execute_cmd(node, status);
+            return execute_cmd(node, status, isbg);
         case NODE_BG:
-            return 0;
+            return execute_bg(node, status);
         case NODE_PIPE:
-            return execute_pipe(node, status);
+            return execute_pipe(node, status, isbg);
         case NODE_SEQ:
             return execute_seq(node, status);
         case NODE_AND:
@@ -276,6 +364,8 @@ int execute_ast(ast_node *node, int *status) {
         case NODE_OR:
             return execute_or(node, status);
         default:
+            fprintf(stderr, "execute_ast: Wrong node type!\n");
+            if (status) *status = 1;
             return -1;
     }
 }
