@@ -3,9 +3,6 @@
 mini-shell is a small POSIX-like shell written in C. It is a learning-focused project
 that implements process creation, job control, redirection, and a custom lexer/parser.
 
-This repo is one of my main resume projects and aims to be clear, readable, and easy
-to experiment with.
-
 ## Features
 
 - Command execution with `execvp`
