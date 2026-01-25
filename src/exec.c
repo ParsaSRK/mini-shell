@@ -65,7 +65,7 @@ int execute_cmd(ast_node *node, int *status, int isbg) {
             return -1;
 
         case 0: // Child Process
-            if (setpgid(0, 0) == -1) {
+            if (setpgid(0, 0) == -1 && errno != EACCES && errno != EINTR) {
                 perror("execute_cmd: setpgid");
                 _exit(127);
             }
@@ -151,7 +151,7 @@ int execute_cmd(ast_node *node, int *status, int isbg) {
 
 int execute_pipe(ast_node *node, int *status, int isbg) {
     int **pipes = NULL;
-    pid_t *pids = NULL;
+    job *j = NULL;
 
     if (!node || node->type != NODE_PIPE || !node->as.list.children) {
         fprintf(stderr, "execute_pipe: Wrong node type!\n");
@@ -163,16 +163,41 @@ int execute_pipe(ast_node *node, int *status, int isbg) {
         ++cnt;
 
     if (cnt < 2) {
-        fprintf(stderr, "execute_pipe: children should be >= 2");
+        fprintf(stderr, "execute_pipe: Children count should be >= 2");
         goto cleanup;
     }
 
     pipes = calloc(cnt, sizeof(int *));
     if (!pipes) goto cleanup;
 
-    pids = malloc(cnt * sizeof(pid_t));
-    if (!pids) goto cleanup;
-    for (int i = 0; i < cnt; ++i) pids[i] = -1;
+    j = calloc(1, sizeof(job));
+    if (!j) {
+        perror("execute_pipe: calloc");
+        goto cleanup;
+    }
+    j->id = getId();
+    if (j->id == -1) {
+        fprintf(stderr, "execute_pipe: Job table full!\n");
+        goto cleanup;
+    }
+
+    j->procs = calloc(cnt, sizeof(process));
+    if (!j->procs) {
+        perror("execute_pipe: calloc");
+        goto cleanup;
+    }
+    j->nproc = cnt;
+    j->isbg = isbg;
+    j->isupd = 0;
+    j->pgid = 0;
+    j->state = JOB_RUNNING;
+
+    for (int i = 0; i < cnt; ++i) {
+        j->procs[i].pid = -1;
+        j->procs[i].exit_code = -1;
+        j->procs[i].term_sig = -1;
+        j->procs[i].state = PROC_RUN;
+    }
 
     for (int i = 0; i < cnt - 1; ++i) {
         pipes[i] = calloc(2, sizeof(int));
@@ -189,15 +214,35 @@ int execute_pipe(ast_node *node, int *status, int isbg) {
             fprintf(stderr, "execute_pipe: Invalid child!\n");
             goto cleanup;
         }
-        pids[i] = fork();
-        if (pids[i] == -1) {
+        j->procs[i].pid = fork();
+        if (j->procs[i].pid == -1) {
             perror("execute_pipe: fork");
             goto cleanup;
         }
-        if (pids[i] != 0)
+        if (j->procs[i].pid != 0) {
+            if (i == 0) {
+                j->pgid = j->procs[0].pid;
+                if (setpgid(j->procs[0].pid, j->pgid) == -1 && errno != EACCES && errno != EINTR) {
+                    perror("execute_pipe: setpgid");
+                    goto cleanup;
+                }
+                if (!isbg && isatty(STDIN_FILENO) && tcsetpgrp(STDIN_FILENO, j->pgid) == -1)
+                    perror("execute_pipe: tcsetpgrp");
+            } else {
+                if (setpgid(j->procs[i].pid, j->pgid) == -1 && errno != EACCES && errno != EINTR) {
+                    perror("execute_pipe: setpgid");
+                    goto cleanup;
+                }
+            }
             continue;
+        }
 
         // child process
+        if (setpgid(0, j->pgid) == -1 && errno != EACCES && errno != EINTR) {
+            perror("execute_pipe: setpgid");
+            _exit(127);
+        }
+
         if (
             (i > 0 && dup2(pipes[i - 1][0], STDIN_FILENO) == -1) ||
             (i < cnt - 1 && dup2(pipes[i][1], STDOUT_FILENO) == -1)
@@ -206,9 +251,9 @@ int execute_pipe(ast_node *node, int *status, int isbg) {
             _exit(127);
         }
 
-        for (int j = 0; j < cnt - 1; ++j) {
-            close(pipes[j][0]);
-            close(pipes[j][1]);
+        for (int k = 0; k < cnt - 1; ++k) {
+            close(pipes[k][0]);
+            close(pipes[k][1]);
         }
 
         if (is_builtin(&child->as.cmd)) {
@@ -227,26 +272,49 @@ int execute_pipe(ast_node *node, int *status, int isbg) {
         close(pipes[i][1]);
     }
 
-    for (int i = 0; i < cnt; ++i) {
-        int wstatus;
-        if (waitpid(pids[i], &wstatus, 0) == -1) {
-            perror("execute_pipe: waitpid");
-            goto cleanup;
-        }
+    add_job(j);
+    if (isbg) {
+        free_ptrv((void **) pipes, free);
+        return 0;
+    }
 
-        // set exit status code
-        if (i == cnt - 1 && status) {
-            if (WIFEXITED(wstatus)) *status = WEXITSTATUS(wstatus);
-            else if (WIFSIGNALED(wstatus)) *status = 128 + WTERMSIG(wstatus);
-            else *status = 1;
+    while (1) {
+        pid_t pid = 0;
+        int wstat;
+        pid = waitpid(-j->pgid, &wstat, WUNTRACED);
+        if (pid > 0) {
+            update_proc(pid, wstat);
+            update_job(j);
+            if (j->state != JOB_RUNNING) break;
+            continue;
+        }
+        if (pid == -1) {
+            if (errno == EINTR) continue;
+            if (errno == ECHILD) break;
+            perror("fg: waitpid");
+            break;
         }
     }
 
-    free(pids);
+    // Set status
+    process *last_proc = j->procs + j->nproc - 1;
+    if (status) {
+        if (last_proc->exit_code != -1) *status = last_proc->exit_code;
+        else if (last_proc->term_sig != -1) *status = 128 + last_proc->term_sig;
+    }
+
+    // Reclaim the terminal
+    if (isatty(STDIN_FILENO) && tcsetpgrp(STDIN_FILENO, getpgrp()) == -1)
+        perror("execute_cmd: tcsetpgrp");
+
     free_ptrv((void **) pipes, free);
     return 0;
 
 cleanup:
+    // Reclaim the terminal
+    if (isatty(STDIN_FILENO) && tcsetpgrp(STDIN_FILENO, getpgrp()) == -1)
+        perror("execute_cmd: tcsetpgrp");
+
     if (pipes) {
         for (int i = 0; i < cnt - 1; ++i) {
             if (pipes[i]) close(pipes[i][0]);
@@ -255,11 +323,15 @@ cleanup:
         free_ptrv((void **) pipes, free);
     }
 
-    if (pids) {
-        for (int i = 0; i < cnt; ++i)
-            if (pids[i] != -1) waitpid(pids[i], NULL, 0);
-        free(pids);
+    if (j && j->procs) {
+        for (int i = 0; i < j->nproc; ++i)
+            if (j->procs[i].pid != -1) {
+                kill(j->procs[i].pid, SIGKILL);
+                waitpid(j->procs[i].pid, NULL, 0);
+            }
     }
+    if (j) free_job(j);
+
     if (status) *status = 1;
     return -1;
 }

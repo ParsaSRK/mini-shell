@@ -21,7 +21,7 @@ int getId(void) {
 
 void free_job(job *j) {
     if (!j) return;
-    pool[j->id] = 0;
+    if (j->id >= 0) pool[j->id] = 0;
     free(j->procs);
     free(j);
 }
