@@ -57,7 +57,14 @@ int execute_and(ast_node *node, int *status);
  */
 int execute_or(ast_node *node, int *status);
 
-int exec_bg(ast_node *node, int *status);
+/**
+ * @brief Executes a NODE_BG as a background process and returns zero if succesfully executed.
+ *
+ * @param node NODE_BG to be run
+ * @param status shell-style exit code if successfully executed.
+ * @return non-zero if failed (internal error).
+ */
+int execute_bg(ast_node *node, int *status);
 
 /**
  * @brief Dispatches execution based on node type.

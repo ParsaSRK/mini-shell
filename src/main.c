@@ -1,15 +1,16 @@
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <signal.h>
 #include <sys/wait.h>
 
 #include "exec.h"
 #include "job.h"
 #include "parse.h"
 
-
+/**
+ * @brief Dummy signal handler to cause syscalls fail with EINTR to reset shell.
+ */
 static void on_sigchild(int signo) {
     (void) signo;
 }
@@ -78,11 +79,7 @@ int main(void) {
 
         // Print exit code
         int status = 0;
-        if (execute_ast(root, &status, 0) == -1) {
-            free_ast_node(root);
-            free(line);
-            return -1;
-        }
+        execute_ast(root, &status, 0);
         if (status != 0) printf("Exit code: %d\n", status);
 
         // Cleanup

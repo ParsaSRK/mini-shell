@@ -21,7 +21,7 @@ int getId(void) {
 
 void free_job(job *j) {
     if (!j) return;
-    if (j->id >= 0) pool[j->id] = 0;
+    if (j->id >= 0 && j->id < MAX_JOBS) pool[j->id] = 0;
     free(j->procs);
     free(j);
 }
@@ -197,7 +197,7 @@ void print_job_state(job_state state) {
 
 job *get_job(int id) {
     if (id == -1) return head;
-    if (!pool[id]) return NULL;
+    if (id < 0 || id >= MAX_JOBS || !pool[id]) return NULL;
     for (job *it = head; it != NULL; it = it->next)
         if (it->id == id) return it;
     return NULL;

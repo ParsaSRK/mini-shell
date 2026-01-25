@@ -6,8 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <asm-generic/errno-base.h>
-#include <linux/limits.h>
+#include <limits.h>
 #include <sys/wait.h>
 
 #include "parse.h"

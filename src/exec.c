@@ -1,12 +1,10 @@
 #include "exec.h"
 
+#include <assert.h>
 #include <errno.h>
-#include <signal.h>
-#include <unistd.h>
-#include <sys/wait.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <asm-generic/errno-base.h>
+#include <sys/wait.h>
 
 #include "parse.h"
 #include "redir.h"
@@ -52,13 +50,10 @@ int execute_cmd(ast_node *node, int *status, int isbg) {
     if (is_builtin(&node->as.cmd))
         return run_builtin(&node->as.cmd, status);
 
-    int jid = getId();
-    if (jid == -1) {
-        fprintf(stderr, "execute_cmd: Job table full!\n");
-        return -1;
-    }
+    pid_t pid = -1;
+    job *j = NULL;
 
-    pid_t pid = fork();
+    pid = fork();
     switch (pid) {
         case -1: // Error
             perror("fork");
@@ -81,19 +76,26 @@ int execute_cmd(ast_node *node, int *status, int isbg) {
     // Set process group ID
     if (setpgid(pid, pid) == -1 && errno != EACCES && errno != EINTR) {
         perror("execute_cmd: setpgid");
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
         return -1;
     }
 
     // Allocate a job
-    job *j = malloc(sizeof(job));
+    j = calloc(1, sizeof(job));
     if (!j) {
-        perror("execute_cmd: malloc");
+        perror("execute_cmd: calloc");
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
         return -1;
     }
-    j->procs = malloc(sizeof(process));
+    j->id = -1;
+    j->procs = calloc(1, sizeof(process));
     if (!j->procs) {
-        perror("execute_cmd: malloc");
-        free(j);
+        perror("execute_cmd: calloc");
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
+        free_job(j);
         return -1;
     }
 
@@ -105,7 +107,14 @@ int execute_cmd(ast_node *node, int *status, int isbg) {
     j->procs[0].term_sig = -1;
 
     // Build job description
-    j->id = jid;
+    j->id = getId();
+    if (j->id == -1) {
+        fprintf(stderr, "execute_cmd: Job table full!\n");
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
+        free_job(j);
+        return -1;
+    }
     j->isbg = isbg;
     j->pgid = pid;
     j->isupd = 0;
@@ -115,8 +124,10 @@ int execute_cmd(ast_node *node, int *status, int isbg) {
     add_job(j);
 
     // dont want for finish if bg
-    if (isbg)
+    if (isbg) {
+        if (status) *status = 0;
         return 0;
+    }
 
     // Pass the terminal
     if (isatty(STDIN_FILENO) && tcsetpgrp(STDIN_FILENO, pid) == -1)
@@ -124,11 +135,9 @@ int execute_cmd(ast_node *node, int *status, int isbg) {
 
     // Wait for child
     int wstatus;
-    if (waitpid(pid, &wstatus, WUNTRACED) == -1) {
-        perror("execute_cmd: waitpid");
-        // Reclaim terminal before returning
-        if (isatty(STDIN_FILENO) && tcsetpgrp(STDIN_FILENO, getpgrp()) == -1) perror("execute_cmd: tcsetpgrp");
-        return -1; // No cleanup, ownership is for jobs.c
+    while (waitpid(pid, &wstatus, WUNTRACED) == -1) {
+        if (errno == EINTR) continue;
+        assert(!"execute_cmd: waitpid failed unexpectedly");
     }
 
     // Reclaim the terminal
@@ -275,6 +284,7 @@ int execute_pipe(ast_node *node, int *status, int isbg) {
     add_job(j);
     if (isbg) {
         free_ptrv((void **) pipes, free);
+        if (status) *status = 0;
         return 0;
     }
 
